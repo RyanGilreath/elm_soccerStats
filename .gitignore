@@ -66,3 +66,6 @@ repl-temp-*
 *.css.map
 
 config/*.json
+
+# compiled js
+main.js
