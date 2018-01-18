@@ -6,6 +6,10 @@ import Html.Events exposing (..)
 import Http
 import Json.Decode as JD exposing (..)
 import Json.Decode.Pipeline exposing (decode, required)
+import Json.Encode as Encode
+
+
+--- Model
 
 
 type alias Model =
@@ -13,8 +17,13 @@ type alias Model =
     , title : String
     , facility : String
     , feedCounts : Int
+    , alertCounts : Int
+    , snoozeCounts : Int
+    , ackCounts : Int
+    , listCounts : Int
     , filter : FilterState
     , patients : List Patient
+    , postMessage : Maybe String
     }
 
 
@@ -35,37 +44,37 @@ type alias Patient =
     }
 
 
+type alias RequestMessage =
+    { message : String }
+
+
 initModel : Model
 initModel =
     { name = "eht8620"
     , title = "Alerts List"
     , facility = "COCBR"
     , feedCounts = 0
+    , alertCounts = 0
+    , snoozeCounts = 0
+    , ackCounts = 0
+    , listCounts = 0
     , filter = AlertList
     , patients = []
+    , postMessage = Nothing
     }
 
 
 
--- initPatients : List Patient
--- initPatients =
---     [ Patient "COCBR12345" "Jane Doe" "Warm-Leg" "alert" "detection" True False False
---     , Patient "COCBR155235" "Ryan Smith" "Vomit" "alert" "detection" True False False
---     , Patient "COCBR763245" "John Doe" "cold" "alert" "positveScreen" True False False
---     ]
---
+-- Url
 
 
 apiUrl : String
 apiUrl =
-    "http://localhost:4000/alerts"
+    "http://localhost:5555/alerts"
 
 
-getPatientCards : Cmd SpotActions
-getPatientCards =
-    JD.list patientDecoder
-        |> Http.get apiUrl
-        |> Http.send NewPatients
+
+-- Decoders/Encoders
 
 
 patientDecoder : JD.Decoder Patient
@@ -86,6 +95,53 @@ patientDecoder =
         |> Json.Decode.Pipeline.required "tier" JD.string
 
 
+requestMessage : JD.Decoder RequestMessage
+requestMessage =
+    decode RequestMessage
+        |> Json.Decode.Pipeline.required "message" JD.string
+
+
+encodePatientAction : Model -> String -> String -> Encode.Value
+encodePatientAction model pid action =
+    Encode.object
+        [ ( "threefour", Encode.string model.name )
+        , ( "facility", Encode.string model.facility )
+        , ( "pid", Encode.string pid )
+        , ( "action", Encode.string action )
+        ]
+
+
+
+-- Commands
+
+
+getPatientCards : Cmd SpotActions
+getPatientCards =
+    JD.list patientDecoder
+        |> Http.get apiUrl
+        |> Http.send NewPatients
+
+
+postPatientAction : Model -> String -> String -> Cmd SpotActions
+postPatientAction model pid action =
+    let
+        url =
+            "http://localhost:5555/api/alerts/actions"
+
+        body =
+            encodePatientAction model pid action
+                |> Http.jsonBody
+
+        request =
+            Http.post url body requestMessage
+    in
+    Http.send PatientAction request
+
+
+
+-- Update
+
+
 type SpotActions
     = SnoozeFeed
     | AlertFeed
@@ -98,6 +154,8 @@ type SpotActions
     | RemoveFromSnooze String
     | Filter FilterState
     | NewPatients (Result Http.Error (List Patient))
+    | PostAction Model String String
+    | PatientAction (Result Http.Error RequestMessage)
 
 
 update : SpotActions -> Model -> ( Model, Cmd SpotActions )
@@ -141,7 +199,7 @@ update msg model =
                     else
                         pat
             in
-            ( { model | patients = List.map snoozePatient model.patients }, Cmd.none )
+            ( { model | patients = List.map snoozePatient model.patients }, postPatientAction model pid "snooze" )
 
         Ack pid ->
             let
@@ -153,7 +211,7 @@ update msg model =
                     else
                         pat
             in
-            ( { model | patients = List.map ackPatient model.patients }, Cmd.none )
+            ( { model | patients = List.map ackPatient model.patients }, postPatientAction model pid "ack" )
 
         OnList pid ->
             let
@@ -165,7 +223,7 @@ update msg model =
                     else
                         pat
             in
-            ( { model | patients = List.map onListPatient model.patients }, Cmd.none )
+            ( { model | patients = List.map onListPatient model.patients }, postPatientAction model pid "onList" )
 
         RemoveFromList pid ->
             let
@@ -175,7 +233,7 @@ update msg model =
                     else
                         pat
             in
-            ( { model | patients = List.map removePatientList model.patients }, Cmd.none )
+            ( { model | patients = List.map removePatientList model.patients }, postPatientAction model pid "removeFromList" )
 
         RemoveFromSnooze pid ->
             let
@@ -199,6 +257,23 @@ update msg model =
                     Debug.log "NOPE" error
             in
             ( model, Cmd.none )
+
+        PostAction model pid action ->
+            ( model, postPatientAction model pid action )
+
+        PatientAction (Ok msg) ->
+            let
+                message =
+                    "Patient Action" ++ toString msg
+            in
+            ( { model | postMessage = Just message }, Cmd.none )
+
+        PatientAction (Err error) ->
+            let
+                message =
+                    toString error
+            in
+            ( { model | postMessage = Just message }, Cmd.none )
 
 
 type FilterState
@@ -226,6 +301,10 @@ patientState model =
                     \patient -> patient.state == "onList"
     in
     List.filter filterPatients model.patients
+
+
+
+-- Utils
 
 
 tierValue : String -> String
@@ -269,6 +348,54 @@ tierClass tier =
                     "sp-tier__indicator sp-tier--no-tier"
     in
     tierCardValue
+
+
+filterPatientsFeed : Model -> FilterState -> Html SpotActions
+filterPatientsFeed model filterState =
+    let
+        headerTitle =
+            case filterState of
+                AlertList ->
+                    "Alerts"
+
+                SnoozeList ->
+                    "Snoozed"
+
+                AckList ->
+                    "Acknowledged"
+
+                CareList ->
+                    "List"
+    in
+    a [ href "#", class "center-header", onClick (Filter filterState) ]
+        [ text headerTitle ]
+
+
+stateCounts : String -> List Patient -> Html SpotActions
+stateCounts state patientList =
+    let
+        patientCount =
+            case state of
+                "alert" ->
+                    List.length (List.filter (\patient -> patient.state == "alert") patientList)
+
+                "snooze" ->
+                    List.length (List.filter (\patient -> patient.state == "snooze") patientList)
+
+                "ack" ->
+                    List.length (List.filter (\patient -> patient.state == "ack") patientList)
+
+                "onList" ->
+                    List.length (List.filter (\patient -> patient.state == "onList") patientList)
+
+                _ ->
+                    0
+    in
+    label [] [ patientCount |> toString |> text ]
+
+
+
+-- View
 
 
 viewPatientCard : FilterState -> Patient -> Html SpotActions
@@ -324,7 +451,33 @@ viewPatientCardSnooze patient =
 
 viewPatientCardAck : Patient -> Html SpotActions
 viewPatientCardAck patient =
-    h2 [] [ text patient.name ]
+    div [ class "sp-patient-card" ]
+        [ section [ class "sp-patient__alert", style [ ( "text-align", "center" ) ] ]
+            [ header [ class "sp-alert__reason" ]
+                [ h3
+                    [ class "js-name"
+                    , style [ ( "text-decoration", "none" ), ( "letter-spacing", "1.5px" ) ]
+                    ]
+                    [ text patient.name ]
+                ]
+            , section [ class "sp-patient--actions" ]
+                [ button
+                    [ class "sp-btn sp-btn--success list-background white js-action"
+                    , onClick (OnList patient.pid)
+                    ]
+                    [ text "Add to List" ]
+                , button
+                    [ class "sp-btn sp-btn--danger list-background white js-action"
+                    , onClick (RemoveFromSnooze patient.pid)
+                    ]
+                    [ text "Remove" ]
+                , button
+                    [ class "sp-btn sp-btn--primary snooze-background white js-vitals"
+                    ]
+                    [ text "Vitals" ]
+                ]
+            ]
+        ]
 
 
 viewPatientCardList : Patient -> Html SpotActions
@@ -469,50 +622,6 @@ viewPatientCardAlert patient =
         ]
 
 
-filterPatientsFeed : Model -> FilterState -> Html SpotActions
-filterPatientsFeed model filterState =
-    let
-        headerTitle =
-            case filterState of
-                AlertList ->
-                    "Alerts"
-
-                SnoozeList ->
-                    "Snoozed"
-
-                AckList ->
-                    "Acknowledged"
-
-                CareList ->
-                    "List"
-    in
-    a [ href "#", class "center-header", onClick (Filter filterState) ]
-        [ text headerTitle ]
-
-
-stateCounts : String -> List Patient -> Html SpotActions
-stateCounts state patientList =
-    let
-        patientCount =
-            case state of
-                "alert" ->
-                    List.length (List.filter (\patient -> patient.state == "alert") patientList)
-
-                "snooze" ->
-                    List.length (List.filter (\patient -> patient.state == "snooze") patientList)
-
-                "ack" ->
-                    List.length (List.filter (\patient -> patient.state == "ack") patientList)
-
-                "onList" ->
-                    List.length (List.filter (\patient -> patient.state == "onList") patientList)
-
-                _ ->
-                    0
-    in
-    label [] [ patientCount |> toString |> text ]
-
-
 view : Model -> Html SpotActions
 view model =
     div [ class "container" ]
@@ -534,6 +643,7 @@ view model =
                 , stateCounts "onList" model.patients
                 ]
             ]
+        , div [] [ text (toString model.postMessage) ]
         , div [ class "sp-alert__feed list" ]
             [ h2 [ class "sp-feed__header" ] [ text model.title ]
             , section [ class "main" ]
