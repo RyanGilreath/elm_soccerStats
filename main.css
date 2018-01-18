@@ -1,0 +1,161 @@
+html, body {
+    font-family: 'Roboto', sans-serif;
+}
+
+.sp-alert__feed {
+    background: #f7f8ff;
+    width: 90%;
+    min-width: 375px;
+    margin: auto;
+    padding: 2em;
+}
+
+h2.sp-feed__header {
+    text-align: center;
+    padding: 40px;
+    font-size: 20px;
+    font-weight: bold;
+    /* color: #fff; */
+    background: #f7f8ff;
+}
+.sp-patient-card {
+    background: #fff;
+    color: #2c304f;
+    padding: 1.5em;
+    margin-bottom: 1.25em;
+    box-shadow: 0px 10px 40px -20px rgba(44, 48, 79, 0.5);
+    display: flex;
+}
+.sp-patient-card .sp-patient__alert {
+    flex: 4;
+    display: grid;
+}
+.sp-patient-card .sp-patient__alert .sp-alert__reason {
+    padding: .5em;
+}
+.sp-patient-card .sp-patient__alert .sp-patient__details {
+    padding: .5em;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+}
+.sp-patient-card .sp-patient__alert .sp-patient__elem span {
+    font-size: 14px;
+    font-weight: bold;
+    opacity: .5;
+}
+
+.sp-patient-card .sp-tier__indicator.sp-tier--1 header {
+    border-color: #06d6a0;
+}
+
+.sp-patient-card .sp-tier__indicator.sp-tier--3 header {
+    border-color: #fa3877;
+}
+.sp-patient-card .sp-tier__indicator.sp-tier--2 header {
+    border-color: #7547FF;
+}
+.sp-patient-card .sp-patient__alert .sp-patient__elem {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+.state-headers {
+    text-align: center;
+    height: 200px;
+    width: 800px;
+    color: white;
+}
+
+.center-header {
+  background: #3F8C9B;
+  border-radius: 25px;
+  color: white;
+  padding: 20px;
+  text-decoration:none;
+}
+
+.sp-patient-card .sp-patient__alert .sp-patient__elem {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+.sp-dt-reason {
+    background: #fa3877;
+    padding: 5px;
+    border-radius: 20px;
+    display: inline-block;
+    color: white;
+}
+
+.sp-patient-card .sp-tier__indicator header {
+    border-radius: 50em;
+    height: 160px;
+    width: 160px;
+    border: 8px solid #abaecb;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+.sp-stats {
+    width: 90%;
+    margin: auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    justify-content: space-around;
+    background: #10456f;
+    padding: 2em 0;
+    transition: all .3s ease;
+    color: #fff;
+}
+
+ol, ul {
+    list-style: none;
+}
+.sp-patient-card .sp-tier__indicator {
+    flex: 1;
+}
+.sp-patient--actions {
+    display: flex;
+    margin-top: 1em;
+    padding: .5em;
+}
+
+.sp-patient--actions .sp-btn {
+    margin: 0 10px;
+    width: 100%;
+}
+
+.sp-btn--success {
+    background: #06d6a0;
+    color: #fff;
+}
+.sp-btn--secondary {
+    background: #1B9AAA;
+    color: #fff;
+}
+
+.sp-btn--warning {
+    background: #ffcf49;
+    color: #fff;
+}
+.sp-btn--danger {
+    background: #fa3877;
+    color: #fff;
+}
+.sp-btn--primary {
+    background: #d3d5f3;
+    color: #272b42;
+}
+
+.sp-btn {
+    padding: .75em;
+    border: 0;
+    border-radius: 27px;
+    transition: all .2s ease;
+    position: relative;
+    height: 35px;
+}
