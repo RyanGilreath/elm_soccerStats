@@ -7,8 +7,26 @@
         <title>SPOT+</title>
     </head>
     <body>
+        <div id="rootid"></div>
+
         <script>
-            Elm.Main.fullscreen();
+            // Elm.Main.fullscreen();
+            //
+            //
+            var root = document.getElementById('rootid');
+            var lol = document.getElementById('sp-card-hi')
+
+            var app = Elm.Main.embed(root);
+            window.app = app;
+
+            app.ports.vitals.subscribe(function(data){
+                var li = document.createElement('h3');
+                console.log(data)
+                li.innerText = data;
+                console.log(li.innerText)
+                console.log(document.getElementById(`sp-card-hi-${data}`))
+                document.getElementById(`sp-card-hi-${data}`).appendChild(li);
+            });
         </script>
     </body>
 </html>

@@ -1,4 +1,4 @@
-module Main exposing (..)
+port module Main exposing (..)
 
 import Html exposing (..)
 import Html.Attributes exposing (..)
@@ -156,6 +156,7 @@ type SpotActions
     | NewPatients (Result Http.Error (List Patient))
     | PostAction Model String String
     | PatientAction (Result Http.Error RequestMessage)
+    | Vitals String
 
 
 update : SpotActions -> Model -> ( Model, Cmd SpotActions )
@@ -274,6 +275,9 @@ update msg model =
                     toString error
             in
             ( { model | postMessage = Just message }, Cmd.none )
+
+        Vitals pid ->
+            ( model, vitals pid )
 
 
 type FilterState
@@ -539,6 +543,7 @@ viewPatientCardList patient =
                     [ text "Remove" ]
                 , button
                     [ class "sp-btn sp-btn--primary snooze-background white js-vitals"
+                    , onClick (Vitals patient.pid)
                     ]
                     [ text "Vitals" ]
                 ]
@@ -548,7 +553,11 @@ viewPatientCardList patient =
 
 viewPatientCardAlert : Patient -> Html SpotActions
 viewPatientCardAlert patient =
-    div [ class "sp-patient-card" ]
+    div
+        [ class "sp-patient-card"
+        , id ("sp-card-hi-" ++ patient.pid)
+        , attribute "data-pid" patient.pid
+        ]
         [ section [ class (tierClass patient.tier) ]
             [ header []
                 [ section []
@@ -615,6 +624,7 @@ viewPatientCardAlert patient =
                     [ text "Snooze" ]
                 , button
                     [ class "sp-btn sp-btn--primary snooze-background white js-vitals"
+                    , onClick (Vitals patient.pid)
                     ]
                     [ text "Vitals" ]
                 ]
@@ -647,7 +657,7 @@ view model =
         , div [ class "sp-alert__feed list" ]
             [ h2 [ class "sp-feed__header" ] [ text model.title ]
             , section [ class "main" ]
-                [ ul [ class "" ]
+                [ ul [ id "lol" ]
                     (List.map (viewPatientCard model.filter) (patientState model))
                 ]
             ]
@@ -662,3 +672,6 @@ main =
         , update = update
         , subscriptions = \_ -> Sub.none
         }
+
+
+port vitals : String -> Cmd msg
