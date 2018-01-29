@@ -8,7 +8,6 @@ import Json.Decode as JD exposing (..)
 import Json.Decode.Pipeline exposing (decode, required)
 import Json.Encode as Encode
 import Phoenix.Channel
-import Phoenix.Push
 import Phoenix.Socket
 import Task
 
@@ -309,7 +308,9 @@ update msg model =
         GetPatientCard raw ->
             case JD.decodeValue patientDecoder raw of
                 Ok msg ->
-                    ( { model | patients = msg :: model.patients }
+                    ( { model
+                        | patients = msg :: List.filter (\pat -> pat.pid /= msg.pid) model.patients
+                      }
                     , Cmd.none
                     )
 
@@ -374,16 +375,16 @@ tierValue tier =
     let
         tierCardValue =
             case tier of
-                "3" ->
+                "3.0" ->
                     "Tier: 3"
 
-                "2" ->
+                "2.0" ->
                     "Tier: 2"
 
-                "1" ->
+                "1.0" ->
                     "Tier: 1"
 
-                "0" ->
+                "0.0" ->
                     "Tier: 0"
 
                 _ ->
@@ -397,13 +398,13 @@ tierClass tier =
     let
         tierCardValue =
             case tier of
-                "3" ->
+                "3.0" ->
                     "sp-tier__indicator sp-tier--3"
 
-                "2" ->
+                "2.0" ->
                     "sp-tier__indicator sp-tier--2"
 
-                "1" ->
+                "1.0" ->
                     "sp-tier__indicator sp-tier--1"
 
                 _ ->
