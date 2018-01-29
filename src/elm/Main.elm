@@ -7,6 +7,10 @@ import Http
 import Json.Decode as JD exposing (..)
 import Json.Decode.Pipeline exposing (decode, required)
 import Json.Encode as Encode
+import Phoenix.Channel
+import Phoenix.Push
+import Phoenix.Socket
+import Task
 
 
 --- Model
@@ -24,6 +28,7 @@ type alias Model =
     , filter : FilterState
     , patients : List Patient
     , postMessage : Maybe String
+    , phxSocket : Phoenix.Socket.Socket SpotActions
     }
 
 
@@ -61,6 +66,7 @@ initModel =
     , filter = AlertList
     , patients = []
     , postMessage = Nothing
+    , phxSocket = initPhxSocket
     }
 
 
@@ -71,6 +77,24 @@ initModel =
 apiUrl : String
 apiUrl =
     "http://localhost:5555/alerts"
+
+
+socketServer : String
+socketServer =
+    "ws://localhost:4000/socket/websocket"
+
+
+initPhxSocket : Phoenix.Socket.Socket SpotActions
+initPhxSocket =
+    Phoenix.Socket.init socketServer
+        |> Phoenix.Socket.withDebug
+        |> Phoenix.Socket.on "msg:alert" "spot:alert" GetPatientCard
+
+
+joinChannel : Cmd SpotActions
+joinChannel =
+    Task.succeed JoinChannel
+        |> Task.perform identity
 
 
 
@@ -157,6 +181,9 @@ type SpotActions
     | PostAction Model String String
     | PatientAction (Result Http.Error RequestMessage)
     | Vitals String
+    | GetPatientCard JD.Value
+    | JoinChannel
+    | PhoenixMsg (Phoenix.Socket.Msg SpotActions)
 
 
 update : SpotActions -> Model -> ( Model, Cmd SpotActions )
@@ -278,6 +305,37 @@ update msg model =
 
         Vitals pid ->
             ( model, vitals pid )
+
+        GetPatientCard raw ->
+            case JD.decodeValue patientDecoder raw of
+                Ok msg ->
+                    ( { model | patients = msg :: model.patients }
+                    , Cmd.none
+                    )
+
+                Err error ->
+                    ( model, Cmd.none )
+
+        JoinChannel ->
+            let
+                channel =
+                    Phoenix.Channel.init "spot:alert"
+
+                ( phxSocket, phxCmd ) =
+                    Phoenix.Socket.join channel model.phxSocket
+            in
+            ( { model | phxSocket = phxSocket }
+            , Cmd.map PhoenixMsg phxCmd
+            )
+
+        PhoenixMsg msg ->
+            let
+                ( phxSocket, phxCmd ) =
+                    Phoenix.Socket.update msg model.phxSocket
+            in
+            ( { model | phxSocket = phxSocket }
+            , Cmd.map PhoenixMsg phxCmd
+            )
 
 
 type FilterState
@@ -665,14 +723,29 @@ view model =
         ]
 
 
+subscriptions : Model -> Sub SpotActions
+subscriptions model =
+    Phoenix.Socket.listen model.phxSocket PhoenixMsg
+
+
 main : Program Never Model SpotActions
 main =
     Html.program
-        { init = ( initModel, getPatientCards )
+        { init = init
         , view = view
         , update = update
-        , subscriptions = \_ -> Sub.none
+        , subscriptions = subscriptions
         }
+
+
+init : ( Model, Cmd SpotActions )
+init =
+    ( initModel
+    , Cmd.batch
+        [ getPatientCards
+        , joinChannel
+        ]
+    )
 
 
 port vitals : String -> Cmd msg
