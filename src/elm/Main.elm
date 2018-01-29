@@ -477,6 +477,7 @@ viewPatientCardAck patient =
                     [ text "Remove" ]
                 , button
                     [ class "sp-btn sp-btn--primary snooze-background white js-vitals"
+                    , onClick (Vitals patient.pid)
                     ]
                     [ text "Vitals" ]
                 ]
@@ -657,7 +658,7 @@ view model =
         , div [ class "sp-alert__feed list" ]
             [ h2 [ class "sp-feed__header" ] [ text model.title ]
             , section [ class "main" ]
-                [ ul [ id "lol" ]
+                [ ul [ id "svg" ]
                     (List.map (viewPatientCard model.filter) (patientState model))
                 ]
             ]

@@ -16,6 +16,10 @@
   },
   "devDependencies": {
     "autoprefixer": "^6.7.7",
+    "d3": "^4.10.2",
+    "d3-scale-chromatic": "^1.1.1",
+    "jquery": "^3.2.1",
+    "moment": "^2.18.1",
     "bootstrap-sass": "^3.3.7",
     "copy-webpack-plugin": "^4.0.1",
     "css-loader": "^0.27.3",
