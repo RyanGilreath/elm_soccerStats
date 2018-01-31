@@ -19,14 +19,12 @@ type alias Model =
     { name : String
     , title : String
     , facility : String
-    , feedCounts : Int
-    , alertCounts : Int
-    , snoozeCounts : Int
-    , ackCounts : Int
-    , listCounts : Int
     , filter : FilterState
     , patients : List Patient
+    , patientsSearch : Maybe String
     , postMessage : Maybe String
+    , searchName : String
+    , searchAccid : String
     , phxSocket : Phoenix.Socket.Socket SpotActions
     }
 
@@ -52,19 +50,21 @@ type alias RequestMessage =
     { message : String }
 
 
+type alias SearchRequestMessage =
+    { message : String }
+
+
 initModel : Model
 initModel =
     { name = "eht8620"
     , title = "Alerts List"
     , facility = "COCBR"
-    , feedCounts = 0
-    , alertCounts = 0
-    , snoozeCounts = 0
-    , ackCounts = 0
-    , listCounts = 0
     , filter = AlertList
     , patients = []
+    , patientsSearch = Nothing
     , postMessage = Nothing
+    , searchName = ""
+    , searchAccid = ""
     , phxSocket = initPhxSocket
     }
 
@@ -75,7 +75,7 @@ initModel =
 
 apiUrl : String
 apiUrl =
-    "http://localhost:5555/alerts"
+    "http://localhost:4000/api/alerts"
 
 
 socketServer : String
@@ -124,6 +124,12 @@ requestMessage =
         |> Json.Decode.Pipeline.required "message" JD.string
 
 
+requestSearchMessage : JD.Decoder SearchRequestMessage
+requestSearchMessage =
+    decode SearchRequestMessage
+        |> Json.Decode.Pipeline.required "message" JD.string
+
+
 encodePatientAction : Model -> String -> String -> Encode.Value
 encodePatientAction model pid action =
     Encode.object
@@ -131,6 +137,21 @@ encodePatientAction model pid action =
         , ( "facility", Encode.string model.facility )
         , ( "pid", Encode.string pid )
         , ( "action", Encode.string action )
+        ]
+
+
+encodeSearchMsg : Model -> Encode.Value
+encodeSearchMsg model =
+    let
+        ( key, msg ) =
+            if String.isEmpty model.searchName == True then
+                ( "accid", model.searchAccid )
+            else
+                ( "name", model.searchName )
+    in
+    Encode.object
+        [ ( key, Encode.string msg )
+        , ( "facility", Encode.string model.facility )
         ]
 
 
@@ -149,7 +170,7 @@ postPatientAction : Model -> String -> String -> Cmd SpotActions
 postPatientAction model pid action =
     let
         url =
-            "http://localhost:5555/api/alerts/actions"
+            "http://localhost:4000/api/alerts/actions"
 
         body =
             encodePatientAction model pid action
@@ -161,6 +182,22 @@ postPatientAction model pid action =
     Http.send PatientAction request
 
 
+searchPatients : Model -> Cmd SpotActions
+searchPatients model =
+    let
+        url =
+            "http://localhost:4000/api/search"
+
+        body =
+            encodeSearchMsg model
+                |> Http.jsonBody
+
+        request =
+            Http.post url body requestSearchMessage
+    in
+    Http.send PatientSearch request
+
+
 
 -- Update
 
@@ -170,13 +207,17 @@ type SpotActions
     | AlertFeed
     | AckFeed
     | ListFeed
+    | SearchFeed
     | Snooze String
     | Ack String
     | OnList String
     | RemoveFromList String
     | RemoveFromSnooze String
+    | SearchMsgName String
+    | PatientSearch (Result Http.Error SearchRequestMessage)
     | Filter FilterState
     | NewPatients (Result Http.Error (List Patient))
+    | PostSearch Model
     | PostAction Model String String
     | PatientAction (Result Http.Error RequestMessage)
     | Vitals String
@@ -212,6 +253,13 @@ update msg model =
         ListFeed ->
             ( { model
                 | title = "Care List"
+              }
+            , Cmd.none
+            )
+
+        SearchFeed ->
+            ( { model
+                | title = "Search Results"
               }
             , Cmd.none
             )
@@ -272,6 +320,9 @@ update msg model =
             in
             ( { model | patients = List.map removePatientSnooze model.patients }, Cmd.none )
 
+        SearchMsgName name ->
+            ( { model | searchName = name }, Cmd.none )
+
         Filter filterState ->
             ( { model | filter = filterState }, Cmd.none )
 
@@ -288,6 +339,9 @@ update msg model =
         PostAction model pid action ->
             ( model, postPatientAction model pid action )
 
+        PostSearch model ->
+            ( model, searchPatients model )
+
         PatientAction (Ok msg) ->
             let
                 message =
@@ -301,6 +355,20 @@ update msg model =
                     toString error
             in
             ( { model | postMessage = Just message }, Cmd.none )
+
+        PatientSearch (Ok msg) ->
+            let
+                message =
+                    "Patient Action" ++ toString msg
+            in
+            ( { model | patientsSearch = Just message }, Cmd.none )
+
+        PatientSearch (Err error) ->
+            let
+                message =
+                    toString error
+            in
+            ( { model | patientsSearch = Just message }, Cmd.none )
 
         Vitals pid ->
             ( model, vitals pid )
@@ -322,6 +390,7 @@ update msg model =
                 channel =
                     Phoenix.Channel.init "spot:alert"
 
+                -- |> Phoenix.Channel.onJoin (always GetPatientCard)
                 ( phxSocket, phxCmd ) =
                     Phoenix.Socket.join channel model.phxSocket
             in
@@ -349,21 +418,21 @@ type FilterState
 patientState : Model -> List Patient
 patientState model =
     let
-        filterPatients =
+        ( whatPatients, filterPatients ) =
             case model.filter of
                 AlertList ->
-                    \patient -> patient.state == "alert"
+                    ( model.patients, \patient -> patient.state == "alert" )
 
                 SnoozeList ->
-                    \patient -> patient.state == "snooze"
+                    ( model.patients, \patient -> patient.state == "snooze" )
 
                 AckList ->
-                    \patient -> patient.state == "ack"
+                    ( model.patients, \patient -> patient.state == "ack" )
 
                 CareList ->
-                    \patient -> patient.state == "onList"
+                    ( model.patients, \patient -> patient.state == "onList" )
     in
-    List.filter filterPatients model.patients
+    List.filter filterPatients whatPatients
 
 
 
@@ -695,7 +764,14 @@ viewPatientCardAlert patient =
 view : Model -> Html SpotActions
 view model =
     div [ class "container" ]
-        [ ul [ class "sp-stats" ]
+        [ div [ class "search" ]
+            [ h2 [] [ text "Patient Search" ]
+            , input [ onInput SearchMsgName ] []
+            , button [ onClick (PostSearch model) ] [ text "Search" ]
+            ]
+        , div [] [ text (toString model.searchName) ]
+        , div [] [ text (toString model.patientsSearch) ]
+        , ul [ class "sp-stats" ]
             [ li [ class "center-header", onClick AlertFeed ]
                 [ filterPatientsFeed model AlertList
                 , stateCounts "alert" model.patients
@@ -713,7 +789,6 @@ view model =
                 , stateCounts "onList" model.patients
                 ]
             ]
-        , div [] [ text (toString model.postMessage) ]
         , div [ class "sp-alert__feed list" ]
             [ h2 [ class "sp-feed__header" ] [ text model.title ]
             , section [ class "main" ]
