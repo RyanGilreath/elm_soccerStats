@@ -50,10 +50,6 @@ type alias RequestMessage =
     { message : String }
 
 
-type alias SearchRequestMessage =
-    { message : String }
-
-
 initModel : Model
 initModel =
     { name = "eht8620"
@@ -797,11 +793,16 @@ viewPatientCardAlert patient =
 view : Model -> Html SpotActions
 view model =
     div [ class "container" ]
-        [ div [ class "search" ]
-            [ h2 [] [ text "Patient Search" ]
-            , input [ onInput SearchMsgName, onEnter (PostSearch model), placeholder "Search Name" ] []
-            , input [ onInput SearchMsgAccid, onEnter (PostSearch model), placeholder "Search ACCID" ] []
-            , button [ onClick (PostSearch model) ] [ text "Search" ]
+        [ nav [ class "sp-navigation" ]
+            [ div [ class "pull-left" ]
+                [ div [ class "select" ]
+                    [ select []
+                        [ option [] [ text "Choose Facilty" ]
+                        , option [] [ text "COCBR" ]
+                        , option [] [ text "COCFH" ]
+                        ]
+                    ]
+                ]
             ]
         , ul [ class "sp-stats" ]
             [ li [ class "center-header", onClick AlertFeed ]
@@ -819,6 +820,16 @@ view model =
             , li [ class "center-header", onClick ListFeed ]
                 [ filterPatientsFeed model CareList
                 , stateCounts "onList" model.patients
+                ]
+            ]
+        , div [ id "list-feed" ]
+            [ div [ class "sp-list__controls" ]
+                [ h2 [] [ text "Patient Search" ]
+                , label [] [ text "Name " ]
+                , input [ class "sp-search-input", onInput SearchMsgName, onEnter (PostSearch model) ] []
+                , label [] [ text "Accid " ]
+                , input [ class "sp-search-input", onInput SearchMsgAccid, onEnter (PostSearch model) ] []
+                , button [ class "sp-btn sp-btn--secondary", onClick (PostSearch model) ] [ text "Search" ]
                 ]
             ]
         , div [ class "sp-alert__feed list" ]
