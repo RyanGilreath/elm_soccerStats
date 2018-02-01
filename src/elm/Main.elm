@@ -21,7 +21,7 @@ type alias Model =
     , facility : String
     , filter : FilterState
     , patients : List Patient
-    , patientsSearch : Maybe String
+    , patientsSearch : List Patient
     , postMessage : Maybe String
     , searchName : String
     , searchAccid : String
@@ -61,7 +61,7 @@ initModel =
     , facility = "COCBR"
     , filter = AlertList
     , patients = []
-    , patientsSearch = Nothing
+    , patientsSearch = []
     , postMessage = Nothing
     , searchName = ""
     , searchAccid = ""
@@ -124,10 +124,9 @@ requestMessage =
         |> Json.Decode.Pipeline.required "message" JD.string
 
 
-requestSearchMessage : JD.Decoder SearchRequestMessage
+requestSearchMessage : JD.Decoder (List Patient)
 requestSearchMessage =
-    decode SearchRequestMessage
-        |> Json.Decode.Pipeline.required "message" JD.string
+    JD.list patientDecoder
 
 
 encodePatientAction : Model -> String -> String -> Encode.Value
@@ -214,7 +213,8 @@ type SpotActions
     | RemoveFromList String
     | RemoveFromSnooze String
     | SearchMsgName String
-    | PatientSearch (Result Http.Error SearchRequestMessage)
+    | SearchMsgAccid String
+    | PatientSearch (Result Http.Error (List Patient))
     | Filter FilterState
     | NewPatients (Result Http.Error (List Patient))
     | PostSearch Model
@@ -239,6 +239,9 @@ update msg model =
         AlertFeed ->
             ( { model
                 | title = "Alert List"
+                , patientsSearch = []
+                , searchAccid = ""
+                , searchName = ""
               }
             , Cmd.none
             )
@@ -323,6 +326,9 @@ update msg model =
         SearchMsgName name ->
             ( { model | searchName = name }, Cmd.none )
 
+        SearchMsgAccid accid ->
+            ( { model | searchAccid = accid }, Cmd.none )
+
         Filter filterState ->
             ( { model | filter = filterState }, Cmd.none )
 
@@ -340,7 +346,12 @@ update msg model =
             ( model, postPatientAction model pid action )
 
         PostSearch model ->
-            ( model, searchPatients model )
+            ( { model
+                | filter = SearchList
+                , title = "Search Results"
+              }
+            , searchPatients model
+            )
 
         PatientAction (Ok msg) ->
             let
@@ -357,18 +368,18 @@ update msg model =
             ( { model | postMessage = Just message }, Cmd.none )
 
         PatientSearch (Ok msg) ->
-            let
-                message =
-                    "Patient Action" ++ toString msg
-            in
-            ( { model | patientsSearch = Just message }, Cmd.none )
+            ( { model
+                | patientsSearch = msg
+              }
+            , Cmd.none
+            )
 
         PatientSearch (Err error) ->
             let
                 message =
-                    toString error
+                    []
             in
-            ( { model | patientsSearch = Just message }, Cmd.none )
+            ( { model | patientsSearch = message }, Cmd.none )
 
         Vitals pid ->
             ( model, vitals pid )
@@ -413,6 +424,7 @@ type FilterState
     | SnoozeList
     | AckList
     | CareList
+    | SearchList
 
 
 patientState : Model -> List Patient
@@ -431,6 +443,9 @@ patientState model =
 
                 CareList ->
                     ( model.patients, \patient -> patient.state == "onList" )
+
+                SearchList ->
+                    ( model.patientsSearch, \patient -> patient.state /= "onList" )
     in
     List.filter filterPatients whatPatients
 
@@ -498,6 +513,9 @@ filterPatientsFeed model filterState =
 
                 CareList ->
                     "List"
+
+                SearchList ->
+                    "Search Results"
     in
     a [ href "#", class "center-header", onClick (Filter filterState) ]
         [ text headerTitle ]
@@ -526,6 +544,18 @@ stateCounts state patientList =
     label [] [ patientCount |> toString |> text ]
 
 
+onEnter : SpotActions -> Attribute SpotActions
+onEnter msg =
+    let
+        isEnter code =
+            if code == 13 then
+                JD.succeed msg
+            else
+                JD.fail "not ENTER"
+    in
+    on "keydown" (JD.andThen isEnter keyCode)
+
+
 
 -- View
 
@@ -546,6 +576,9 @@ viewPatientCard filterState =
 
                 CareList ->
                     viewPatientCardList
+
+                SearchList ->
+                    viewPatientCardAlert
     in
     htmlView
 
@@ -766,11 +799,10 @@ view model =
     div [ class "container" ]
         [ div [ class "search" ]
             [ h2 [] [ text "Patient Search" ]
-            , input [ onInput SearchMsgName ] []
+            , input [ onInput SearchMsgName, onEnter (PostSearch model), placeholder "Search Name" ] []
+            , input [ onInput SearchMsgAccid, onEnter (PostSearch model), placeholder "Search ACCID" ] []
             , button [ onClick (PostSearch model) ] [ text "Search" ]
             ]
-        , div [] [ text (toString model.searchName) ]
-        , div [] [ text (toString model.patientsSearch) ]
         , ul [ class "sp-stats" ]
             [ li [ class "center-header", onClick AlertFeed ]
                 [ filterPatientsFeed model AlertList
